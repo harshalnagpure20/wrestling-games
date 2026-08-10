@@ -1,0 +1,231 @@
+PROMPT:
+
+Build me a playable MVP of a 3D arcade wrestling game in Three.js with the grappling depth,
+reversal drama, and physicality of the golden era of console wrestling.
+
+Everything original: original wrestlers, names, finishers, arena, presentation, audio, visual
+identity. No copyrighted characters, likenesses, logos, or music.
+
+START FROM THE EXISTING CODEBASE
+
+Do not start from an empty folder. rork-medieval-3d-chess in this folder is King's Gambit, an
+MIT-licensed Vite + React + Three.js 3D chess game with a working renderer, quality presets,
+post-processing, procedural textures, synthesised audio, a skeletal animation layer, a throttled
+GLB loader, a HUD, and Playwright browser tests already configured. It also ships 129 GLB models
+including 18 rigged humanoid characters with roughly 110 animation clips.
+
+PORTING_PLAN.md is the audit of that repo — what to keep, what to rework, what to delete, and the
+order to do it in. Read it. Fork the project, keep its LICENSE and add attribution, strip the
+chess out, and build the wrestling game in the space that clears.
+
+The chess rules are worthless to us and the engine infrastructure is worth a great deal. Do not
+rewrite what already works, and do not try to preserve anything in the delete list out of caution.
+
+READ FIRST
+
+MECHANICS_SPEC.md in this folder is the reverse-engineered system design for the engine I want:
+the grapple matrix, the position and condition state model, the move slot schema and its MVP
+subset, the shared animation library architecture, reversal channels, localised damage,
+submissions, the finisher meter and its situational requirements, attributes, the AI personality
+block, and match rules. It was extracted from the period strategy guide and community
+documentation, both of which are also in this folder.
+
+Read it before you design anything. It is a systems document, not an asset library — take the
+architecture and the wrestling vocabulary from it, never names or identity.
+
+SCOPE — this is an MVP, hold this line
+
+Two wrestlers with contrasting archetypes. One arena. Singles match only. Roughly 30–40 moves
+each, following the MVP subset in the spec: chosen so every system is exercised at least once,
+not to fill all 120 slots.
+
+Systems get full depth. Content gets cut. That trade is the whole point — the game feels right
+because of the state machine and the reversal windows, not because of the roster size.
+
+Not in the MVP: additional match types, season mode, create-a-wrestler, online, elaborate
+entrances, tag and double-team moves.
+
+THE TWO BARS
+
+Correctness. MECHANICS_SPEC.md. A critic reading the spec and driving the running game must be
+able to confirm each system behaves as specified. "It has grapples" is not passing. Four base
+grapple states, each holding four distinct authored moves, entered separately, independently
+reversible, is passing.
+
+Feel. Real wrestling games. There are reference screenshots in this folder already. Collect more
+frames and short clips from the best-feeling wrestling games ever shipped and from stylised games
+with elite animation and impact, save them into references/, and treat them as the bar for motion
+and presentation. Every critic round on feel is a blind A/B: our clip beside a reference clip,
+unlabeled, and the critic picks the better one.
+
+The honest target is to beat the 2003 original on looks while matching it on systems. Not to beat
+a modern AAA wrestling game — that is not reachable here and pretending otherwise just lets the
+loop declare victory early.
+
+Nothing in references/ ships. It exists for critics only.
+
+ASSETS — read this carefully, a previous attempt failed here
+
+Character meshes and rigs are sourced, not generated. Full sourcing plan and licence terms are in
+ASSET_SOURCES.md — read it before acquiring anything.
+
+The text-to-3D pipeline the chess manifest points at is NOT available. Do not plan around it.
+Bodies come from MakeHuman, rigged through the Mixamo auto-rigger.
+
+Start with the rigged humanoids already in the chess repo as placeholders so the systems work has
+bodies to run against from day one. They are medieval soldiers and they look wrong, which is fine
+— nothing before the asset phase depends on them looking right.
+
+Build a body morph layer: per-bone scaling on head, neck, shoulders, chest, arms, forearms, hands,
+abdomen, waist, thighs, legs and feet, each with independent width, height and length. This is
+exactly how the source game's create-a-wrestler worked, and the community guide in this folder
+contains real working morph values you can read as a sanity check on sensible ranges. One base mesh
+plus a morph profile per character is how two wrestlers get genuinely different builds without two
+sets of modelling work.
+
+Use the morph layer for accurate physique variety, not for stylisation. The two MVP wrestlers are a
+super-heavyweight powerhouse and a technical cruiserweight — the weight-class rules only become
+visible when the bodies differ sharply. Rig at neutral proportions and apply the morph at runtime;
+Mixamo's auto-rigger fails on heavily deformed meshes.
+
+Single-body animation is sourced too. Idles, walks, runs, strikes, staggers, knockdowns, get-ups.
+Ten usable clips already exist in the chess repo — anim-idle, anim-combat-stance, anim-knock-down,
+anim-step-forward-and-push, anim-kneel-on-one-knee-and-stand and the locomotion set. Beyond those,
+use the Quaternius Universal Animation Library (CC0, glTF, Mixamo-compatible rig, and its combat
+combos ship as separate hits with separate recoveries, which maps onto the strike string and
+reversal windows). Fill remaining gaps from Mixamo.
+
+Two-body grapple motion is procedural and IK-driven. Lock-ups, suplexes, powerbombs, pin
+transitions. No library has these and no text-to-3D pipeline will give you two skeletons authored
+to match. Define contact points, drive both rigs toward authored key poses, correct root motion so
+the bodies actually meet. This is the hard problem and it should absorb most of your iteration.
+
+Build it in the post-mixer slot. The chess codebase already proves the pattern: it lets the
+animation mixer drive the body, then re-applies a held pose afterwards each frame because the
+mixer otherwise owns the skeleton. Our contact correction lives in that same slot. See
+PORTING_PLAN.md.
+
+Follow the shared animation library architecture in the spec: one pool of move animations keyed
+by family and variant, wrestlers as assembly manifests selecting from that pool, and only 3–5
+genuinely unique animations per character for their signatures and finishers.
+
+Everything else stays code-generated: ring, arena, crowd, HUD, VFX, textures, and all audio via
+the Web Audio API.
+
+Only CC0 or explicitly free-for-commercial assets. Keep an ATTRIBUTIONS.md with the source and
+licence of every sourced file.
+
+An earlier build of this game required every mesh to be generated in code. It produced
+featureless capsule-shaped wrestlers. That is the failure mode to avoid.
+
+GRAPHICS
+
+The reference game's own look, executed with modern technology. It aimed at grounded realism and
+only looks dated because of PS2 hardware — low polygon counts, tiny textures, no real-time
+shadows, flat lighting. The intent was right. Build the game that team would ship today.
+
+So the reference footage IS the art bar for proportion and tone. Match its physiques and its
+sense of scale, then render it properly: PBR materials, real-time shadows, an arena lighting rig,
+contact shadows under every foot, and restrained post-processing.
+
+Three things this rules out.
+
+No cartoon exaggeration. Not WWE All Stars, not Fortnite. No oversized hands, no waists tapered to
+nothing, no shrunken legs. Real wrestlers are already enormous and accurate anatomy gives you the
+imposing silhouette for free — a 320lb powerhouse next to a 210lb cruiserweight reads instantly
+without any stylisation.
+
+No cel shading. No toon ramps, no hard colour bands, no ink outlines, no halftone. Surfaces shade
+smoothly and continuously the way real materials do.
+
+No photorealism. Skin shaders and pore detail are not reachable here, and a failed attempt reads
+as plastic — which is exactly why the period screenshots look the way they do. Accurate proportions
+with believable materials and good lighting is the target. Realistic anatomy with cheap materials
+is the failure mode.
+
+Where the budget goes: lighting, materials and shadows, not polygon count or texture resolution.
+That is where the entire generational gap between the reference and this build actually lives.
+
+Priority order, and work it in this order:
+
+1. Silhouette. A wrestler must be identifiable as a solid black shape. This matters more than
+   everything below it combined.
+2. Lighting. Arena spotlights, warm key and cool fill, coloured rim lights separating bodies from
+   the background, and honest contact shadows under every foot — grounding is what sells weight.
+3. Materials. Give skin, trunks, boots, leather, canvas, steel and rope genuinely different
+   responses. Material variety does more for perceived quality than polygon count.
+4. Post. ACES filmic tone mapping, bloom, subtle ambient occlusion, a light colour grade, gentle
+   vignette. Keep it restrained.
+5. Geometry density. Last, and least important.
+
+Faces stay simple and slightly abstracted. Identity comes from silhouette, build, attire and
+palette, not facial detail — chasing expressive faces at this budget is how characters end up
+looking wrong.
+
+The full rendering pass comes after the fight feels right. Tuning materials against unproven
+gameplay is wasted work.
+
+CONSTRAINTS
+
+Keep the inherited stack: Vite, React, TypeScript, Three.js, Tailwind, shadcn/ui, Vitest and
+Playwright. It already matches what I wanted, so do not migrate it. I run the install and the dev
+script and I am playing. Nothing else to configure.
+
+Do not add heavy dependencies. A physics engine for weapons and debris is fine if you need one;
+a game framework or a state-management library is not.
+
+60fps at 1080p on a mid-range Windows laptop in Chrome. No frame spikes during finishers, table
+breaks, or camera transitions.
+
+The canvas fills the viewport and the HUD is an overlay on top of it. A previous build put the
+canvas in normal document flow and it ended up squeezed into a corner with text overflowing
+around it.
+
+HOW TO WORK
+
+You are the lead. Design the architecture, then break the goal into the smallest pieces that can
+be built and judged independently, and fan out builder subagents. You decide the decomposition.
+Keep the fan-out modest — the builder/critic split is what matters, not the size of the fleet.
+
+Build the capture harness before anything else. Playwright is already installed and configured in
+the inherited repo, so extend it rather than starting over: it must boot the game, drive a
+wrestler into any specific state named in the spec, and capture stills, frame sequences and short
+clips from multiple angles. Stills cannot judge this game. Contact, weight, reversals and camera
+feel only exist in motion, so the harness must produce motion.
+
+Builders never grade their own work. A critic sees only the real captured output, the spec, and
+the reference bar — never the builder's history or self-assessment. Critics report defects by
+name: "left foot slides during grapple entry", "hands detach from the shoulders mid-suplex",
+"Power and Quick base grapples resolve to the same animation", "wrestlers are featureless
+blobs with no readable anatomy", "reversal window is visually unreadable", "landing resolves too
+fast to read as weight", "camera hides the pin on impact". A critic that approves work to be
+agreeable has failed its job.
+
+Loop each piece: build, capture, judge against both bars, name the biggest remaining gap, send it
+back. Cap it at roughly three rounds per piece for this MVP, then move on and log what is still
+weak. I would rather have every system at 70 percent than two systems perfect and the rest
+missing.
+
+Prove the match is fun before it is pretty. Get the state machine, the move table, reversal
+windows and damage tuned while the wrestlers are still untextured. Rendering comes after.
+
+After each wave, have one fresh agent play the whole game end to end and smooth it into one
+coherent thing rather than a pile of separately improved parts.
+
+PROGRESS
+
+Maintain a live progress page I can open and refresh from my phone. Show what each subagent is
+working on, the latest clips beside their reference comparisons, which spec systems are verified
+and which are not, and the current biggest gaps. Keep it current so I never have to interrupt you
+to ask how it is going.
+
+Pause after the capture harness and the first playable grapple exchange so I can look before you
+commit to the whole pipeline.
+
+REPORTING
+
+Tell me the truth about quality. If the grapple system is at 60 percent, if the rig is producing
+foot sliding, if impacts feel weak, say so and say why. I would rather hear it from you than find
+it myself.
+
+Use subagents.

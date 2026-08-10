@@ -32,7 +32,7 @@
 
 import * as THREE from "three";
 
-import type { SpellLight } from "./spells";
+import type { PooledLight } from "./lightPool";
 import { shockwaveTexture } from "./textures";
 import { Ease, type TweenManager } from "./tween";
 
@@ -311,7 +311,7 @@ export interface ShatterOptions {
   /** Hard cap on instances, off the graphics preset. */
   budget: number;
   /** A slot borrowed from the scene's light pool, or null to run unlit. */
-  light?: SpellLight | null;
+  light?: PooledLight | null;
 }
 
 /**

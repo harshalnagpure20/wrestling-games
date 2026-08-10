@@ -1,5 +1,4 @@
-import { ARMY_SKINS, AUDIO_URLS, DEFAULT_ARMY_SKINS, GUN_AUDIO_URLS, type GunVoice } from "../assets/generated";
-import type { Faction, PieceKind } from "../core/types";
+import { AUDIO_URLS, IMPACT_TAKE_URLS, VOICE_CLIPS, type ImpactVoice } from "../assets/generated";
 
 type SfxName = "place" | "capture" | "check" | "fanfare";
 type BedName = "ambience" | "score" | "tension";
@@ -54,7 +53,7 @@ export interface GunSoundOptions extends StrikeSoundOptions {
    * Which recorded barrel to fire. Omitted, the shot is the synthesised voice
    * alone — which is what every non-gunpowder army has always used.
    */
-  voice?: GunVoice;
+  voice?: ImpactVoice;
 }
 
 /** Placement of one melee-strike sound in the mix. */
@@ -145,15 +144,15 @@ const TAKE_GAIN_RANGE: readonly [number, number] = [0.3, 3.4];
  * the frame it happens. Authored per barrel, because “how good is this
  * recording” is not something `calibre` can express.
  */
-const SHOT_VOICES: Record<GunVoice, { take: number; synth: number }> = {
-  /** Quietest kill on the board by design — the recording is mostly room. */
-  pistol: { take: 0.74, synth: 0.6 },
+const SHOT_VOICES: Record<ImpactVoice, { take: number; synth: number }> = {
+  /** A jab or a forearm — mostly air, so the synth carries the contact. */
+  light: { take: 0.74, synth: 0.6 },
   /** The hardest transient of the four: it needs almost nothing under it. */
-  musket: { take: 1, synth: 0.34 },
-  /** A thin whip-crack; the synth supplies the body it does not have. */
-  rifle: { take: 0.88, synth: 0.5 },
-  /** Carries its own hall, but none of the sub-bass a field gun owes the room. */
-  cannon: { take: 0.96, synth: 0.52 },
+  medium: { take: 1, synth: 0.34 },
+  /** A slam through the canvas. Carries its own room, but none of the sub-bass. */
+  heavy: { take: 0.96, synth: 0.52 },
+  /** A chair or a bell: thin and bright; the synth supplies the body. */
+  weapon: { take: 0.88, synth: 0.5 },
 };
 
 /**
@@ -290,14 +289,10 @@ export class AudioManager {
   private shots = new Map<string, ShotTake>();
   private shotLoads = new Map<string, Promise<void>>();
   /**
-   * Whose voices each side dies with. Swapped when the player musters a
-   * different army, so a French line infantryman never screams like a jaguar
-   * warrior.
+   * Wrestler vocalisations, keyed by voice id. Swapped when the card changes so
+   * a cruiserweight never grunts like a super-heavyweight.
    */
-  private cries: Record<Faction, Record<PieceKind, string>> = {
-    w: ARMY_SKINS[DEFAULT_ARMY_SKINS.w].cries,
-    b: ARMY_SKINS[DEFAULT_ARMY_SKINS.b].cries,
-  };
+  private cries: Record<string, string> = { ...VOICE_CLIPS };
   private activeVoices = 0;
   private beds = new Map<BedName, Bed>();
   private muted = false;
@@ -419,17 +414,17 @@ export class AudioManager {
 
   /** Warms every cry in the background once the mixer is alive. */
   /**
-   * Points each side at its army's voices and warms the new clips. Cries already
+   * Points the mixer at a new set of voices and warms them. Clips already
    * decoded stay cached (they are keyed by URL), so switching back is instant.
    */
-  setArmyCries(cries: Record<Faction, Record<PieceKind, string>>): void {
-    this.cries = { w: cries.w, b: cries.b };
+  setVoiceClips(clips: Record<string, string>): void {
+    this.cries = { ...clips };
     if (this.ctx) void this.primeDeathCries();
   }
 
-  /** Warms the recorded barrels in the background once the mixer is alive. */
+  /** Warms the recorded impact takes in the background once the mixer is alive. */
   private async primeGunfire(): Promise<void> {
-    await Promise.all(Object.values(GUN_AUDIO_URLS).map((url) => this.loadShot(url)));
+    await Promise.all(Object.values(IMPACT_TAKE_URLS).map((url) => this.loadShot(url)));
   }
 
   private loadShot(url: string): Promise<void> {
@@ -557,15 +552,11 @@ export class AudioManager {
   }
 
   private async primeDeathCries(): Promise<void> {
-    const factions: Faction[] = ["w", "b"];
-    const kinds: PieceKind[] = ["k", "q", "b", "n", "r", "p"];
-    for (const faction of factions) {
-      await Promise.all(kinds.map((kind) => this.loadDeathCry(faction, kind)));
-    }
+    await Promise.all(Object.keys(this.cries).map((voice) => this.loadDeathCry(voice)));
   }
 
-  private loadDeathCry(faction: Faction, kind: PieceKind): Promise<void> {
-    const url = this.cries[faction]?.[kind];
+  private loadDeathCry(voice: string): Promise<void> {
+    const url = this.cries[voice];
     if (!url) return Promise.resolve();
     const pending = this.voiceLoads.get(url);
     if (pending) return pending;
@@ -581,7 +572,7 @@ export class AudioManager {
         }
         this.voices.set(url, await ctx.decodeAudioData(raw));
       } catch (error) {
-        console.warn(`[audio] death cry "${faction}${kind}" failed to load`, error);
+        console.warn(`[audio] voice clip "${voice}" failed to load`, error);
       }
     })();
     this.voiceLoads.set(url, job);
@@ -594,12 +585,12 @@ export class AudioManager {
    * and the music ducked underneath. Stays silent (and warms the clip for next
    * time) if the sample has not finished streaming in yet.
    */
-  deathCry(faction: Faction, kind: PieceKind, options: DeathCryOptions = {}): void {
+  deathCry(voice: string, options: DeathCryOptions = {}): void {
     if (!this.ctx || !this.master || this.muted) return;
-    const url = this.cries[faction]?.[kind];
+    const url = this.cries[voice];
     const buffer = url ? this.voices.get(url) : undefined;
     if (!buffer) {
-      void this.loadDeathCry(faction, kind);
+      void this.loadDeathCry(voice);
       return;
     }
     if (this.activeVoices >= MAX_VOICES) return;
@@ -1257,7 +1248,7 @@ export class AudioManager {
     const recorded =
       options.voice !== undefined &&
       mix !== null &&
-      this.playTake(GUN_AUDIO_URLS[options.voice], {
+      this.playTake(IMPACT_TAKE_URLS[options.voice], {
         pan: options.pan,
         volume: mix.take * (0.9 + calibre * 0.25) * (options.volume ?? 1),
         delay: options.delay,
@@ -1458,7 +1449,7 @@ export class AudioManager {
    * capture hit already has its own synthesised weight behind it.
    */
   ballImpact(options: StrikeSoundOptions = {}): void {
-    this.playTake(GUN_AUDIO_URLS.impact, {
+    this.playTake(IMPACT_TAKE_URLS.body, {
       pan: options.pan,
       volume: 0.85 * (options.volume ?? 1),
       delay: options.delay,

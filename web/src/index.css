@@ -102,4 +102,20 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+
+  /*
+   * The match fills the window. The canvas is the page, and every piece of UI
+   * is an overlay above it — nothing sits in document flow, and nothing is
+   * allowed to introduce a scrollbar, because a scrollbar means the canvas is
+   * being squeezed and the framing solve is working against a lie.
+   */
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #05070b;
+  }
 }

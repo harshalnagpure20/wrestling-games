@@ -1,11 +1,10 @@
-# King's Gambit — the app
+# Wrestling Arena — web app
 
-This folder holds the game itself. For the project overview, features, architecture notes and
-contribution guide, read the [root README](../README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md).
+This folder holds the game itself. Overview and attributions: [root README](../README.md),
+[ATTRIBUTIONS.md](../ATTRIBUTIONS.md). Parent-folder docs: `BUILD_STEPS.md`, `MECHANICS_SPEC.md`.
 
-A cinematic 3D chess game: sculpted medieval, Mesoamerican and Napoleonic figures fighting on a
-marble-and-basalt board. Built with Vite + React + TypeScript + three.js, with chess.js for
-the rules and a Web Worker search engine for the computer opponent.
+Vite + React + TypeScript + three.js. Forked from King's Gambit; chess logic lives under
+`reference/` only.
 
 ## Setup
 

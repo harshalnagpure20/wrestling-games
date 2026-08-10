@@ -1,3 +1,18 @@
+# Wrestling Arena
+
+HCTP-inspired browser wrestling game (original roster: Ironclad / Vanguard). Built on a fork of
+**King's Gambit** (MIT) — Vite + React + TypeScript + three.js. Chess game logic has been removed;
+see `ATTRIBUTIONS.md` and the parent-folder docs (`BUILD_STEPS.md`, `MECHANICS_SPEC.md`).
+
+```bash
+cd web && npm install && npm run dev
+```
+
+---
+
+<details>
+<summary>Original King's Gambit README (historical)</summary>
+
 # King's Gambit — Medieval 3D Chess
 
 A cinematic 3D chess game in the browser. Rival civilisations — a medieval European
@@ -1612,3 +1627,5 @@ React (MIT), Tailwind CSS (MIT), Radix UI / shadcn/ui (MIT), lucide (ISC).
 
 The 3D characters and audio shipped with the project were generated for it and may be reused
 under the same terms; if you replace them, credit the new authors here.
+
+</details>
