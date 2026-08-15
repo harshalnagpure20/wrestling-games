@@ -8,6 +8,16 @@ import { render } from "vitest-browser-react";
 
 import { GameShell } from "@/ui/GameShell";
 
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function keyDown(code: string): void {
+  window.dispatchEvent(new KeyboardEvent("keydown", { code, bubbles: true }));
+}
+
+function keyUp(code: string): void {
+  window.dispatchEvent(new KeyboardEvent("keyup", { code, bubbles: true }));
+}
+
 async function waitForHarness(timeoutMs = 25000): Promise<boolean> {
   const start = performance.now();
   while (performance.now() - start < timeoutMs) {
@@ -53,6 +63,82 @@ describe("capture harness", () => {
     expect(still).toBeTruthy();
     expect(still!.startsWith("data:image/png")).toBe(true);
     expect(still!.length).toBeGreaterThan(8000);
+  });
+
+  it("forces every Phase 5 systems state and captures each one", async () => {
+    expect(await waitForHarness()).toBe(true);
+
+    const states = [
+      "grapple",
+      "rearGrapple",
+      "groggy",
+      "down",
+      "pin",
+      "submission",
+      "finisherReady",
+      "hurt",
+    ] as const;
+
+    for (const state of states) {
+      expect(window.__WRESTLING__!.forceState(state, 0), state).toBe(true);
+      await new Promise((r) => setTimeout(r, 120));
+      const still = window.__WRESTLING__!.captureStill();
+      expect(still, state).toBeTruthy();
+      expect(still!.length, state).toBeGreaterThan(8000);
+    }
+
+    // The systems layer really is running behind those stills.
+    window.__WRESTLING__!.forceState("pin", 0);
+    await new Promise((r) => setTimeout(r, 1200));
+    const pinned = window.__WRESTLING__!.snapshot();
+    expect(pinned.pin).not.toBeNull();
+    expect(pinned.pin!.count).toBeGreaterThanOrEqual(1);
+
+    window.__WRESTLING__!.forceState("hurt", 0);
+    await new Promise((r) => setTimeout(r, 150));
+    const hurt = window.__WRESTLING__!.snapshot();
+    expect(hurt.fighters[1].damageLevels.head).toBe(4);
+    expect(hurt.fighters[1].vitality).toBeLessThan(50);
+
+    window.__WRESTLING__!.resetMatch();
+  });
+
+  /**
+   * The one thing the headless engine tests cannot cover: the keyboard →
+   * intent → edge-detection → resolution-table path, driven by real key events
+   * against the live shell.
+   */
+  it("plays the grapple matrix through the real input pipeline", async () => {
+    expect(await waitForHarness()).toBe(true);
+    window.__WRESTLING__!.resetMatch();
+    window.__WRESTLING__!.forceState("clinch");
+    await wait(120);
+
+    // Direction + grapple: up chooses the power base grapple.
+    keyDown("KeyW");
+    keyDown("KeyK");
+    await wait(120);
+    keyUp("KeyK");
+    await wait(700);
+
+    let snapshot = window.__WRESTLING__!.snapshot();
+    expect(snapshot.fighters[0].position).toBe("grappleHolding");
+    expect(snapshot.fighters[1].position).toBe("grappleHeld");
+
+    // Step two: the same button, still holding up, runs that family's move.
+    keyDown("KeyK");
+    await wait(120);
+    keyUp("KeyK");
+    keyUp("KeyW");
+    await wait(1200);
+
+    snapshot = window.__WRESTLING__!.snapshot();
+    // A vertical suplex loads the head and neck, not the back that threw it.
+    expect(snapshot.fighters[1].damage.head).toBeGreaterThan(0);
+    expect(snapshot.fighters[1].vitality).toBeLessThan(100);
+    expect(snapshot.fighters[0].iconCharge).toBeGreaterThan(0);
+
+    window.__WRESTLING__!.resetMatch();
   });
 
   it("forces clinch and walk named states", async () => {

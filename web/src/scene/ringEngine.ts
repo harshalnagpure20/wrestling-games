@@ -15,7 +15,7 @@
 
 import * as THREE from "three";
 
-import { MatchControl, type FighterDebug } from "../core/control";
+import { MatchControl, type MatchHud } from "../core/control";
 import { installHarness, uninstallHarness, type NamedState } from "../core/harness";
 import { InputManager } from "../core/input";
 import { ARENA_LOOKS, DEFAULT_ARENA, type ArenaTheme } from "./arena";
@@ -47,8 +47,17 @@ export interface RingEngineOptions {
   theme?: ArenaTheme;
   onStats?: (stats: EngineStats) => void;
   onRoster?: (state: RosterLoadState) => void;
-  onDebug?: (fighters: FighterDebug[]) => void;
+  onMatch?: (hud: MatchHud) => void;
 }
+
+const EMPTY_HUD: MatchHud = {
+  clock: 0,
+  live: true,
+  fighters: [],
+  pin: null,
+  submission: null,
+  result: null,
+};
 
 export class RingEngine {
   readonly scene = new THREE.Scene();
@@ -65,7 +74,7 @@ export class RingEngine {
   private readonly input = new InputManager();
   private readonly control = new MatchControl();
   private rosterState: RosterLoadState = "loading";
-  private fighterDebug: FighterDebug[] = [];
+  private hud: MatchHud = EMPTY_HUD;
   private lastFps = 0;
 
   private preset: QualityPreset;
@@ -95,13 +104,13 @@ export class RingEngine {
 
   private readonly onStats?: (stats: EngineStats) => void;
   private readonly onRoster?: (state: RosterLoadState) => void;
-  private readonly onDebug?: (fighters: FighterDebug[]) => void;
+  private readonly onMatch?: (hud: MatchHud) => void;
   private readonly canvas: HTMLCanvasElement;
 
   constructor(options: RingEngineOptions) {
     this.onStats = options.onStats;
     this.onRoster = options.onRoster;
-    this.onDebug = options.onDebug;
+    this.onMatch = options.onMatch;
     this.canvas = options.canvas;
     this.theme = options.theme ?? DEFAULT_ARENA;
     this.preset = detectQualityPreset();
@@ -203,11 +212,20 @@ export class RingEngine {
       ready: () => this.rosterState === "ready" && this.wrestlers.length >= 2,
       snapshot: () => ({
         roster: this.rosterState,
-        fighters: this.fighterDebug,
+        fighters: this.hud.fighters,
         fps: this.lastFps,
         theme: this.theme,
         preset: this.preset,
+        clock: this.hud.clock,
+        live: this.hud.live,
+        pin: this.hud.pin,
+        submission: this.hud.submission,
+        result: this.hud.result,
       }),
+      resetMatch: () => {
+        this.control.engine.reset();
+        this.forceState("idle");
+      },
       forceState: (state, fighter = 0) => this.forceState(state, fighter),
       waitReady: async (timeoutMs = 20000) => {
         const start = performance.now();
@@ -239,6 +257,8 @@ export class RingEngine {
         this.control.place(1, 1.35, 0, this.wrestlers);
         this.control.face(0, new THREE.Vector3(1, 0, 0), this.wrestlers);
         this.control.face(1, new THREE.Vector3(-1, 0, 0), this.wrestlers);
+        this.control.engine.forceState(0, "standing");
+        this.control.engine.forceState(1, "standing");
         this.wrestlers[0].playIdle(0);
         this.wrestlers[1].playIdle(0);
         return true;
@@ -277,9 +297,71 @@ export class RingEngine {
         this.control.face(fighter, new THREE.Vector3(1, 0, 0), this.wrestlers);
         this.control.face(other, new THREE.Vector3(-1, 0, 0), this.wrestlers);
         return this.wrestlers[fighter].playOneShot(state) > 0;
+
+      // ------------------------------------------------ Phase 5 systems states
+      // Each of these starts from a clean match so a capture of one scenario
+      // never inherits a pin count or a submission from the last one.
+      case "grapple":
+      case "rearGrapple": {
+        this.scenario(fighter, other, 0.45);
+        this.control.engine.forceGrapple(fighter, "power", state === "rearGrapple");
+        this.wrestlers[fighter].playIdle(0.1);
+        this.wrestlers[other].playIdle(0.1);
+        return true;
+      }
+      case "groggy": {
+        this.scenario(fighter, other, 0.9);
+        this.control.engine.forceState(other, "groggy", 6);
+        return true;
+      }
+      case "down": {
+        this.scenario(fighter, other, 1.0);
+        this.control.engine.forceState(other, "down", 6);
+        this.wrestlers[other].playOneShot("knockdown");
+        return true;
+      }
+      case "pin": {
+        this.scenario(fighter, other, 0.7);
+        this.control.engine.forceState(other, "down", 6);
+        this.control.engine.forcePin(fighter);
+        return true;
+      }
+      case "submission": {
+        this.scenario(fighter, other, 0.7);
+        return this.control.engine.forceSubmission(fighter);
+      }
+      case "finisherReady": {
+        this.scenario(fighter, other, 1.1);
+        this.control.engine.forceIcons(fighter, 3);
+        this.control.engine.forceState(other, "groggy", 8);
+        return true;
+      }
+      case "hurt": {
+        this.scenario(fighter, other, 1.4);
+        // Red head and red legs — the posture and HUD readouts at their loudest.
+        this.control.engine.forceDamage(other, "head", 92);
+        this.control.engine.forceDamage(other, "legs", 88);
+        this.control.engine.forceDamage(other, "torso", 55);
+        return true;
+      }
       default:
         return false;
     }
+  }
+
+  /** Wipe the match, then place the two wrestlers for a fresh scenario. */
+  private scenario(fighter: 0 | 1, other: 0 | 1, separation: number): void {
+    this.control.engine.reset();
+    this.faceOff(fighter, other, separation);
+  }
+
+  /** Place two wrestlers a set distance apart on the centre line, facing off. */
+  private faceOff(fighter: 0 | 1, other: 0 | 1, separation: number): void {
+    const half = separation / 2;
+    this.control.place(fighter, -half, 0, this.wrestlers);
+    this.control.place(other, half, 0, this.wrestlers);
+    this.control.face(fighter, new THREE.Vector3(1, 0, 0), this.wrestlers);
+    this.control.face(other, new THREE.Vector3(-1, 0, 0), this.wrestlers);
   }
 
   /** Borrow a pooled point light for an impact flash. */
@@ -439,8 +521,8 @@ export class RingEngine {
 
     if (this.wrestlers.length >= 2) {
       const intents = this.input.sample();
-      this.fighterDebug = this.control.update(delta, this.wrestlers, intents, this.camera);
-      this.onDebug?.(this.fighterDebug);
+      this.hud = this.control.update(delta, this.wrestlers, intents, this.camera);
+      this.onMatch?.(this.hud);
       this.subjects[0].copy(this.wrestlers[0].position);
       this.subjects[1].copy(this.wrestlers[1].position);
     }
