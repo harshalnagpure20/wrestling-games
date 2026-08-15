@@ -32,6 +32,8 @@ import { radialTexture } from "./textures";
 /** Target standing height in metres before the stature morph. */
 const BASE_HEIGHT = 1.9;
 
+const UP = new THREE.Vector3(0, 1, 0);
+
 export type ClipName = "idle" | "walk" | "run" | "strike" | "knockdown" | "getUp";
 export type MarchClip = "walk" | "run";
 
@@ -181,6 +183,14 @@ export class WrestlerView {
   private phase = Math.random() * Math.PI * 2;
   private marchLoop: MarchClip | null = null;
 
+  /** Current sell amplitude, 0-1, decaying every frame. */
+  private sellAmount = 0;
+  private sellDecay = 3.2;
+  private sellPitch = 0.55;
+  private sellPush = 0.26;
+  private readonly sellDir = new THREE.Vector3(0, 0, 1);
+  private readonly sellAxis = new THREE.Vector3(1, 0, 0);
+
   constructor(skin: WrestlerSkin, model: THREE.Object3D, clips: ClipBag, options: WrestlerOptions) {
     this.id = skin.id;
     this.skin = skin;
@@ -274,7 +284,7 @@ export class WrestlerView {
     const action = this.mixer.clipAction(clip);
     action.enabled = true;
     this.actions.set(name, action);
-    if (name === "idle" && this.idleWanted) this.playIdle(0.35);
+    if (name === "idle") this.playIdle(0.35);
   }
 
   hasClip(name: ClipName): boolean {
@@ -282,7 +292,6 @@ export class WrestlerView {
   }
 
   playIdle(fade = 0.25): void {
-    if (!this.idleWanted) return;
     const action = this.actions.get("idle");
     if (!action || !this.mixer) return;
     this.marchLoop = null;
@@ -294,9 +303,19 @@ export class WrestlerView {
     action.setLoop(THREE.LoopRepeat, Infinity);
     action.clampWhenFinished = false;
     action.enabled = true;
-    action.timeScale = 1;
-    action.fadeIn(fade);
-    action.play();
+    // On low quality, hold the first frame of the combat stance as a static
+    // pose — the mixer still evaluates it every frame so the skeleton stays
+    // in stance, but no keyframes advance.
+    action.timeScale = this.idleWanted ? 1 : 0;
+    // fadeIn(0) creates a zero-duration weight interpolant that evaluates to
+    // the start value (0), leaving the pose invisible. Set weight directly.
+    if (fade <= 0) {
+      action.weight = 1;
+      action.play();
+    } else {
+      action.fadeIn(fade);
+      action.play();
+    }
   }
 
   /**
@@ -375,6 +394,51 @@ export class WrestlerView {
     this.strikeTilt = tilt;
   }
 
+  /**
+   * Sell a blow: fold away from it, then recover.
+   *
+   * This is procedural on purpose. The clip set is six entries wide and none of
+   * them is a flinch, so playing an animation here would mean playing the
+   * *knockdown* for a hit that did not knock anybody down. Instead the reaction
+   * is a post-mixer displacement of the whole body: a pitch away from the blow
+   * plus a shove along its line, decaying over roughly a third of a second.
+   *
+   * It runs on top of whatever clip is playing, so a wrestler can be walking,
+   * held or mid-recovery and still visibly take the hit. The one thing that must
+   * never happen is a body standing in a clean combat stance through an impact.
+   *
+   * @param strength 0-1, normally the move's `impactStrength`.
+   * @param away World-space direction the blow pushes them, XZ.
+   */
+  sell(strength: number, away: THREE.Vector3): void {
+    const amount = THREE.MathUtils.clamp(strength, 0, 1);
+    if (amount <= 0) return;
+    // A harder blow always wins; a lighter one landing mid-sell does not reset
+    // the recovery it is already in the middle of.
+    this.sellAmount = Math.max(this.sellAmount, amount);
+    this.sellDecay = 2.6 + (1 - amount) * 2.2;
+    this.sellPitch = 0.3 + amount * 0.5;
+    this.sellPush = 0.12 + amount * 0.28;
+
+    this.sellDir.copy(away).setY(0);
+    if (this.sellDir.lengthSq() < 1e-6) this.sellDir.set(0, 0, 1);
+    this.sellDir.normalize();
+    // Rotating about (up x push) tips the head in the direction of the push.
+    this.sellAxis.crossVectors(UP, this.sellDir);
+    if (this.sellAxis.lengthSq() < 1e-6) this.sellAxis.set(1, 0, 0);
+    this.sellAxis.normalize();
+  }
+
+  /** A shorter, sharper version of {@link sell} for whiffs and strain. */
+  lurch(strength: number, direction: THREE.Vector3): void {
+    this.sell(strength * 0.5, direction);
+    this.sellDecay = 6.5;
+  }
+
+  get isSelling(): boolean {
+    return this.sellAmount > 0.01;
+  }
+
   update(delta: number, elapsed: number): void {
     if (this.mixer) {
       this.mixer.update(delta);
@@ -382,13 +446,41 @@ export class WrestlerView {
         this.rootBone.position.x = this.rootRest.x;
         this.rootBone.position.z = this.rootRest.z;
       }
-      this.runtime.rotation.x = this.strikeTilt;
+      this.applyReaction(delta, 0);
     } else {
       // Unrigged fallback: a quiet breath so the body still feels alive.
-      const breath = Math.sin(elapsed * 1.1 + this.phase);
-      this.runtime.position.y = breath * 0.008;
-      this.runtime.rotation.x = breath * 0.01 + this.strikeTilt;
+      this.applyReaction(delta, Math.sin(elapsed * 1.1 + this.phase));
     }
+  }
+
+  /**
+   * The post-mixer reaction layer.
+   *
+   * Applied to `runtime`, which sits between ring placement and the sculpt's own
+   * orientation, so it displaces the body without disturbing either where the
+   * wrestler stands or which way they face.
+   */
+  private applyReaction(delta: number, breath: number): void {
+    const slouch = this.strikeTilt + breath * 0.01;
+
+    if (this.sellAmount > 0) {
+      this.sellAmount = Math.max(0, this.sellAmount - delta * this.sellDecay);
+      // Squared falloff: the body snaps away and eases back rather than
+      // sliding home linearly.
+      const eased = this.sellAmount * this.sellAmount;
+      this.runtime.position.set(
+        this.sellDir.x * eased * this.sellPush,
+        breath * 0.008 - eased * 0.05,
+        this.sellDir.z * eased * this.sellPush,
+      );
+      this.runtime.quaternion.setFromAxisAngle(this.sellAxis, eased * this.sellPitch);
+      if (slouch !== 0) this.runtime.rotateX(slouch);
+      return;
+    }
+
+    this.runtime.position.set(0, breath * 0.008, 0);
+    this.runtime.quaternion.identity();
+    if (slouch !== 0) this.runtime.rotateX(slouch);
   }
 
   dispose(): void {

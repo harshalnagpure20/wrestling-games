@@ -19,6 +19,7 @@ import { MatchControl, type MatchHud } from "../core/control";
 import { installHarness, uninstallHarness, type NamedState } from "../core/harness";
 import { InputManager } from "../core/input";
 import { ARENA_LOOKS, DEFAULT_ARENA, type ArenaTheme } from "./arena";
+import { ShakeSystem } from "./effects";
 import { LightPool } from "./lightPool";
 import { PostFX } from "./postfx";
 import { QUALITY_SETTINGS, type QualityPreset, detectQualityPreset } from "./quality";
@@ -73,6 +74,17 @@ export class RingEngine {
   private wrestlers: WrestlerView[] = [];
   private readonly input = new InputManager();
   private readonly control = new MatchControl();
+  private readonly shake = new ShakeSystem();
+  /**
+   * Seconds of hit-stop still owed.
+   *
+   * While this is running the *bodies* stop dead — mixers and match clock both
+   * receive a zero delta — but the camera keeps moving and keeps shaking. That
+   * asymmetry is the whole trick: freezing everything reads as a dropped frame,
+   * while freezing only the fighters reads as a collision hard enough to stop
+   * them both.
+   */
+  private hitStop = 0;
   private rosterState: RosterLoadState = "loading";
   private hud: MatchHud = EMPTY_HUD;
   private lastFps = 0;
@@ -470,7 +482,7 @@ export class RingEngine {
       maxDistance: MAX_ORBIT_DISTANCE + 4,
     });
 
-    this.camera.position.copy(framing.position);
+    this.camera.position.copy(framing.position).add(this.shake.offset);
     this.camera.lookAt(framing.target);
     if (Math.abs(this.camera.fov - framing.fov) > 0.01) {
       this.camera.fov = framing.fov;
@@ -519,18 +531,35 @@ export class RingEngine {
 
     this.renderer.info.reset();
 
+    // Frozen frames still read input, so a press during a three-frame stop is
+    // never eaten; they simply advance no time.
+    let step = delta;
+    if (this.hitStop > 0) {
+      this.hitStop = Math.max(0, this.hitStop - delta);
+      step = 0;
+    }
+
     if (this.wrestlers.length >= 2) {
       const intents = this.input.sample();
-      this.hud = this.control.update(delta, this.wrestlers, intents, this.camera);
+      this.hud = this.control.update(step, this.wrestlers, intents, this.camera);
       this.onMatch?.(this.hud);
+
+      const feedback = this.control.consumeFeedback();
+      if (feedback.hitStop > 0) this.hitStop = Math.max(this.hitStop, feedback.hitStop);
+      if (feedback.shake > 0) this.shake.add(feedback.shake);
+      if (feedback.rumble > 0) this.shake.tremor(feedback.rumble, feedback.rumbleSeconds);
+
       this.subjects[0].copy(this.wrestlers[0].position);
       this.subjects[1].copy(this.wrestlers[1].position);
     }
 
     for (const wrestler of this.wrestlers) {
-      wrestler.update(delta, this.elapsed);
+      wrestler.update(step, this.elapsed);
     }
 
+    // Camera and shake run on the real delta so the picture stays alive through
+    // the freeze.
+    this.shake.update(delta);
     this.solveCamera(delta);
     this.venue.update(this.elapsed, 0.4);
 

@@ -451,7 +451,7 @@ export class MatchEngine {
 
     const resolution = resolve(request);
     if (!resolution.ok || !resolution.move || !resolution.slot) {
-      this.reportFailure(index, resolution.reason, resolution.move);
+      this.reportFailure(index, resolution.reason, resolution.move, button);
       return;
     }
 
@@ -466,6 +466,7 @@ export class MatchEngine {
     }
 
     if (move.category === "finisher" && !fighter.spendIcon()) {
+      this.emit({ type: "move:failed", fighter: index, move, reason: "noIcons" });
       fighter.note("no smack stored");
       return;
     }
@@ -485,7 +486,20 @@ export class MatchEngine {
     this.startMove(index, move, slot, 0);
   }
 
-  private reportFailure(index: 0 | 1, reason: ResolveFailure | undefined, move?: MoveDef): void {
+  /**
+   * A press that produced no move.
+   *
+   * Every branch emits something. The rule that nothing happens is unchanged —
+   * no move starts, no damage is dealt — but the press is always *reported*, so
+   * the presentation layer can show a whiff, a strain or a refusal rather than
+   * leaving the player wondering whether the button registered at all.
+   */
+  private reportFailure(
+    index: 0 | 1,
+    reason: ResolveFailure | undefined,
+    move?: MoveDef,
+    button?: ResolveButton,
+  ): void {
     const fighter = this.fighters[index];
     switch (reason) {
       case "tooHeavy":
@@ -500,15 +514,21 @@ export class MatchEngine {
         fighter.note(`${move?.displayName ?? "move"} — out of range`);
         break;
       case "noSituation":
+        if (move) this.emit({ type: "move:failed", fighter: index, move, reason: "noSituation" });
         fighter.note(move ? `${move.displayName} — wrong situation` : "wrong situation");
         break;
       case "noIcons":
+        if (move) this.emit({ type: "move:failed", fighter: index, move, reason: "noIcons" });
         fighter.note("no smack stored");
         break;
       case "unauthored":
+        if (button) this.emit({ type: "action:empty", fighter: index, button });
         fighter.note("slot empty");
         break;
       default:
+        // "badState" and an unresolved slot both land here: the button means
+        // nothing from where they are standing.
+        if (button) this.emit({ type: "action:empty", fighter: index, button });
         break;
     }
   }
@@ -530,7 +550,7 @@ export class MatchEngine {
     };
     const stolen = finisherResolution(request, opponent.skin.id);
     if (!stolen.ok || !stolen.move || !stolen.slot) {
-      this.reportFailure(index, stolen.reason, stolen.move);
+      this.reportFailure(index, stolen.reason, stolen.move, "finisher");
       return;
     }
     fighter.spendIcon();

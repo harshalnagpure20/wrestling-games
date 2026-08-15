@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { audio } from "@/audio/audioManager";
 import type { FighterDebug, MatchHud } from "@/core/control";
 import type { DamageLevel, Region } from "@/match/types";
 import { REGIONS } from "@/match/types";
@@ -69,22 +70,57 @@ function Meter({
   );
 }
 
-/** The body diagram beside each name bar — four regions, four levels. */
+/** How long a region stays lit after it takes damage, in milliseconds. */
+const REGION_FLASH_MS = 320;
+
+/**
+ * The body diagram beside each name bar — four regions, four levels.
+ *
+ * A region flashes white the instant it takes damage. The HUD is otherwise a
+ * set of slowly-moving bars, and a bar creeping up by four percent is not
+ * something a player looks at mid-match: the flash is what tells them *where*
+ * the last blow landed, which is the entire point of localised damage.
+ */
 function DamageDiagram({ fighter, side }: { fighter: FighterDebug; side: "left" | "right" }) {
+  // Deliberately refs, not state: the HUD already re-renders every frame from
+  // the match loop, so the flash animates without scheduling any work of its own.
+  const previous = useRef<Record<string, number>>({});
+  const struckAt = useRef<Record<string, number>>({});
+  const now = performance.now();
+
+  for (const region of REGIONS) {
+    const value = fighter.damage[region] ?? 0;
+    const before = previous.current[region];
+    if (before !== undefined && value > before + 0.01) struckAt.current[region] = now;
+    previous.current[region] = value;
+  }
+
   return (
     <div className={`mt-1.5 flex gap-1 ${side === "right" ? "flex-row-reverse" : ""}`}>
       {REGIONS.map((region) => {
         const level = fighter.damageLevels[region];
+        const since = now - (struckAt.current[region] ?? -Infinity);
+        const flash = Math.max(0, 1 - since / REGION_FLASH_MS);
         return (
           <div key={region} className="flex-1" title={`${region}: level ${level}`}>
             <div
-              className="h-1.5 rounded-sm transition-colors"
+              className="h-1.5 rounded-sm"
               style={{
                 background: LEVEL_COLOUR[level],
-                boxShadow: level >= 3 ? `0 0 7px ${LEVEL_COLOUR[level]}` : undefined,
+                transform: `scaleY(${1 + flash * 1.6})`,
+                boxShadow:
+                  flash > 0.01
+                    ? `0 0 ${8 + flash * 14}px rgba(255,255,255,${0.35 + flash * 0.6})`
+                    : level >= 3
+                      ? `0 0 7px ${LEVEL_COLOUR[level]}`
+                      : undefined,
+                filter: flash > 0.01 ? `brightness(${1 + flash * 1.8})` : undefined,
               }}
             />
-            <div className="mt-0.5 text-center font-mono text-[8px] tracking-wider text-white/40">
+            <div
+              className="mt-0.5 text-center font-mono text-[8px] tracking-wider"
+              style={{ color: `rgba(255,255,255,${0.4 + flash * 0.55})` }}
+            >
               {REGION_LABEL[region]}
             </div>
           </div>
@@ -308,12 +344,24 @@ export function GameShell() {
     };
     window.addEventListener("keydown", onKey);
 
+    // Browsers will not start an AudioContext without a gesture, so the mixer
+    // comes up on whichever the player does first — a key or a click.
+    const wake = () => {
+      void audio.unlock().catch((error: unknown) => {
+        console.warn("[audio] could not start the mixer", error);
+      });
+    };
+    window.addEventListener("keydown", wake, { once: true });
+    window.addEventListener("pointerdown", wake, { once: true });
+
     // Click the canvas so OS focus isn't stuck on a button/devtools.
     canvas.tabIndex = 0;
     canvas.focus();
 
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", wake);
+      window.removeEventListener("pointerdown", wake);
       observer.disconnect();
       engine.dispose();
       engineRef.current = null;

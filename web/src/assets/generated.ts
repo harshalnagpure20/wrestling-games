@@ -117,8 +117,8 @@ const NEUTRAL_MORPH: MorphProfile = {
 
 export const WRESTLER_SKINS: Record<WrestlerId, WrestlerSkin> = {
   /**
-   * The super-heavyweight. Placeholder rig is the chess temple guardian, chosen
-   * because full plate already reads as bulk and it carries a knockdown clip.
+   * The super-heavyweight. Original wrestler built with Meshy, rigged with
+   * Mixamo-compatible bones. Grounded early-2000s arcade proportions.
    */
   ironclad: {
     id: "ironclad",
@@ -126,12 +126,12 @@ export const WRESTLER_SKINS: Record<WrestlerId, WrestlerSkin> = {
     note: "Super-heavyweight powerhouse — slow, enormous, hits like a truck",
     weight: 330,
     clips: {
-      rigged: `${MODEL_BASE}/211b0ba5-2c7f-44ff-8143-b625bca41df1-rigged.glb`,
-      idle: `${MODEL_BASE}/211b0ba5-2c7f-44ff-8143-b625bca41df1-anim-combat-stance.glb`,
-      walk: `${MODEL_BASE}/211b0ba5-2c7f-44ff-8143-b625bca41df1-anim-casual-walk-inplace.glb`,
-      strike: `${MODEL_BASE}/211b0ba5-2c7f-44ff-8143-b625bca41df1-anim-heavy-hammer-swing.glb`,
-      knockdown: `${MODEL_BASE}/211b0ba5-2c7f-44ff-8143-b625bca41df1-anim-knock-down.glb`,
-      getUp: `${MODEL_BASE}/044ccbd8-c9d3-452e-8524-4a47034b8fe2-anim-kneeling-reload.glb`,
+      rigged: `${MODEL_BASE}/44e81400-8076-427a-8cca-e5a79fb6a878-rigged.glb`,
+      idle: `${MODEL_BASE}/44e81400-8076-427a-8cca-e5a79fb6a878-anim-combat-stance.glb`,
+      walk: `${MODEL_BASE}/44e81400-8076-427a-8cca-e5a79fb6a878-anim-casual-walk-inplace.glb`,
+      strike: `${MODEL_BASE}/44e81400-8076-427a-8cca-e5a79fb6a878-anim-heavy-hammer-swing.glb`,
+      knockdown: `${MODEL_BASE}/44e81400-8076-427a-8cca-e5a79fb6a878-anim-knock-down.glb`,
+      getUp: `${MODEL_BASE}/44e81400-8076-427a-8cca-e5a79fb6a878-anim-kneeling-reload.glb`,
     },
     morph: {
       ...NEUTRAL_MORPH,
@@ -147,39 +147,55 @@ export const WRESTLER_SKINS: Record<WrestlerId, WrestlerSkin> = {
       legs: 1.08,
       stature: 1.08,
     },
-    attributes: { strength: 92, submission: 48, endurance: 74, technique: 52, speed: 38 },
+    // The grappler's spread: he owns Strength outright and Submission clearly
+    // (his second finisher is an arm lock), holds enough Technique to punish a
+    // careless opponent, and is the slowest man in the game by a distance.
+    attributes: { strength: 92, submission: 62, endurance: 74, technique: 55, speed: 34 },
   },
 
   /**
-   * The cruiserweight. Placeholder rig is the chess knight, which carries both
-   * a run and a strut and is the leanest silhouette in the inherited set.
+   * The explosive heavyweight. Original wrestler built with Meshy, rigged with
+   * Mixamo-compatible bones. Grounded early-2000s arcade proportions.
+   *
+   * Retuned away from the original cruiserweight read: this is a 280 lb power
+   * athlete who moves, not a technician. He is *faster* than Ironclad and hits
+   * nearly as hard, and he pays for both with technique — his reversal windows
+   * are narrow and his stamina burns in bursts rather than lasting a war.
    */
   vanguard: {
     id: "vanguard",
     label: "Vanguard",
-    note: "Technical cruiserweight — fast, precise, reverses everything",
-    weight: 215,
+    note: "Explosive heavyweight — short violent bursts, runs people over",
+    weight: 280,
     clips: {
-      rigged: `${MODEL_BASE}/43f08150-5463-4112-9949-2e1a9a9a6bd2-rigged.glb`,
-      idle: `${MODEL_BASE}/43f08150-5463-4112-9949-2e1a9a9a6bd2-anim-combat-stance.glb`,
-      walk: `${MODEL_BASE}/43f08150-5463-4112-9949-2e1a9a9a6bd2-anim-confident-strut-inplace.glb`,
-      run: `${MODEL_BASE}/43f08150-5463-4112-9949-2e1a9a9a6bd2-anim-standard-forward-charge-inplace.glb`,
-      strike: `${MODEL_BASE}/43f08150-5463-4112-9949-2e1a9a9a6bd2-anim-charged-slash.glb`,
-      knockdown: `${MODEL_BASE}/43f08150-5463-4112-9949-2e1a9a9a6bd2-anim-dying-backwards.glb`,
-      getUp: `${MODEL_BASE}/044ccbd8-c9d3-452e-8524-4a47034b8fe2-anim-kneeling-reload.glb`,
+      rigged: `${MODEL_BASE}/28d508e6-da69-45f3-bdb6-030cb6974ea8-rigged.glb`,
+      idle: `${MODEL_BASE}/28d508e6-da69-45f3-bdb6-030cb6974ea8-anim-combat-stance.glb`,
+      walk: `${MODEL_BASE}/28d508e6-da69-45f3-bdb6-030cb6974ea8-anim-confident-strut-inplace.glb`,
+      run: `${MODEL_BASE}/28d508e6-da69-45f3-bdb6-030cb6974ea8-anim-standard-forward-charge-inplace.glb`,
+      strike: `${MODEL_BASE}/28d508e6-da69-45f3-bdb6-030cb6974ea8-anim-charged-slash.glb`,
+      knockdown: `${MODEL_BASE}/28d508e6-da69-45f3-bdb6-030cb6974ea8-anim-dying-backwards.glb`,
+      getUp: `${MODEL_BASE}/28d508e6-da69-45f3-bdb6-030cb6974ea8-anim-kneeling-reload.glb`,
     },
+    // Broad and thick, but tapered where Ironclad is square — a sprinter's
+    // legs under a heavyweight's chest. The silhouette has to read "explosive
+    // power" at a glance, not "cruiserweight".
     morph: {
       ...NEUTRAL_MORPH,
-      shoulders: 1.06,
-      chest: 1.02,
-      arms: 1.02,
-      waist: 0.92,
-      abdomen: 0.94,
-      thighs: 1.04,
-      legs: 1.04,
-      stature: 0.96,
+      neck: 1.1,
+      shoulders: 1.16,
+      chest: 1.13,
+      arms: 1.1,
+      forearms: 1.06,
+      abdomen: 1.04,
+      waist: 1.0,
+      thighs: 1.14,
+      legs: 1.09,
+      stature: 1.02,
     },
-    attributes: { strength: 58, submission: 78, endurance: 82, technique: 90, speed: 88 },
+    // Nearly Ironclad's strength at more than twice his speed — and he pays for
+    // both in Technique and Submission. He cannot out-wrestle anyone and cannot
+    // hold a limb; he has to run people over before they read him.
+    attributes: { strength: 84, submission: 38, endurance: 76, technique: 42, speed: 78 },
   },
 };
 
@@ -213,11 +229,11 @@ export const IMPACT_TAKE_URLS: Record<ImpactVoice | "body", string> = {
 export const VOICE_CLIPS: Record<string, string> = {};
 
 export const AUDIO_URLS = {
-  ambience: `${AUDIO_BASE}/e62d5bb9-8c84-4464-8696-dbcf975f938b.mp3`,
-  score: `${AUDIO_BASE}/3fbe58de-9d38-4d91-a002-794d0e979eb0.mp3`,
-  tension: `${AUDIO_BASE}/00baae5a-fde3-478a-8190-b1ad14d2e96d.mp3`,
+  ambience: `${AUDIO_BASE}/5a5fe9ab-26b3-4d3e-99a8-e78c152c8043.mp3`,
+  score: `${AUDIO_BASE}/05ce3025-df03-48b5-9fce-4d98c22f7f09.mp3`,
+  tension: `${AUDIO_BASE}/b6e838f0-8687-446a-bdbe-99ce598ca8c1.mp3`,
   place: `${AUDIO_BASE}/73f19d09-0275-4c4b-87cd-eeeed26a616b.mp3`,
   capture: `${AUDIO_BASE}/64ee8170-b796-413f-8249-f1deb7803393.mp3`,
   check: `${AUDIO_BASE}/20ebb41c-0b20-4b4b-8c75-5f78541722d3.mp3`,
-  fanfare: `${AUDIO_BASE}/c89fa5ef-7904-4a5f-899e-e1973b13b30f.mp3`,
+  fanfare: `${AUDIO_BASE}/be72bb3f-0f92-4928-a918-6492b4820898.mp3`,
 } as const;

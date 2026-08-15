@@ -1172,6 +1172,63 @@ export class AudioManager {
     this.duckBeds(0.7, 0.7);
   }
 
+  // ------------------------------------------------------------ the match
+
+  /**
+   * One landed blow, voiced by how hard it hit.
+   *
+   * `strength` is the move's own `impactStrength`, so the mix is authored by the
+   * move table rather than guessed here: a jab picks the light take, a slam the
+   * heavy one, and anything at finisher weight gets a body thud layered a couple
+   * of frames behind it so the hit has a floor as well as a crack.
+   *
+   * Falls back to the synthesised slam when the recorded take has not streamed
+   * in yet, because a silent impact is worse than an approximate one.
+   */
+  matchImpact(strength: number, pan = 0): void {
+    if (!this.ctx || !this.master || this.muted) return;
+    const weight = Math.max(0, Math.min(1, strength));
+    const voice: ImpactVoice = weight >= 0.75 ? "heavy" : weight >= 0.42 ? "medium" : "light";
+    const volume = 0.5 + weight * 0.7;
+    // A little pitch scatter so repeated hits never phase into one another.
+    const rate = 0.95 + Math.random() * 0.1 - weight * 0.06;
+    const played = this.playTake(IMPACT_TAKE_URLS[voice], { pan, volume, rate });
+    if (!played) {
+      this.groundSlam({ pan, volume: 0.5 + weight * 0.5, weight });
+      return;
+    }
+    if (weight >= 0.7) {
+      this.playTake(IMPACT_TAKE_URLS.body, { pan, volume: 0.45 + weight * 0.35, delay: 0.03 });
+      this.duckBeds(0.75, 0.5);
+    }
+  }
+
+  /**
+   * A swing that caught nothing but air, or a press the situation refused.
+   * Quiet, short, and *always* audible — its whole job is to prove the button
+   * registered.
+   */
+  matchWhiff(pan = 0, volume = 1): void {
+    this.bladeWhoosh({ pan, volume: 0.42 * volume, weight: 0.75 });
+  }
+
+  /**
+   * The crowd coming up off their seats — a reversal, a near-fall, a finisher
+   * landing. Lifts the ambience bed for a beat and lets it settle back.
+   */
+  crowdSwell(amount = 1, seconds = 2.4): void {
+    const bed = this.beds.get("ambience");
+    if (!bed || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const base = BED_VOLUME.ambience;
+    const peak = base * (1 + Math.max(0, Math.min(1, amount)) * 1.9);
+    bed.target = base;
+    bed.gain.gain.cancelScheduledValues(now);
+    bed.gain.gain.setValueAtTime(bed.gain.gain.value, now);
+    bed.gain.gain.linearRampToValueAtTime(peak, now + 0.18);
+    bed.gain.gain.linearRampToValueAtTime(base, now + Math.max(0.4, seconds));
+  }
+
   /**
    * The sentence being passed: a struck bell built from inharmonic partials with
    * a slow bloom of air under it. Only the crown gets to ring this.

@@ -134,7 +134,7 @@ const COMMON: Moveset = {
   "standing.strike.up": "strike.uppercut",
   "standing.strike.down": "strike.lowKick",
   "standing.strike.left": "strike.hook",
-  "standing.strike.right": "strike.bodyKick",
+  "standing.strike.right": "strike.shortKnee",
   "standing.combo.1": "strike.combo.1",
   "standing.combo.2": "strike.combo.2",
   "standing.combo.3": "strike.combo.3",
@@ -190,40 +190,52 @@ const COMMON: Moveset = {
 
 export const MOVESETS: Record<WrestlerId, Moveset> = {
   /**
-   * The super-heavyweight. Takes the power family's heaviest options, throws
-   * the elbow rather than the hook, and cannot use the quick set's speed.
+   * The super-heavyweight, and a deliberately *slow* one. Every standing button
+   * is a heavy: long startup, huge payoff, and wide enough reversal windows that
+   * a player who reads him gets to punish him for it. His grapple game is the
+   * power family plus his own lift/dump/vice set, and his two finishers ask for
+   * two different situations — groggy for the carry dump, downed-at-the-head for
+   * the arm lock.
    */
   ironclad: {
     ...COMMON,
+    // Delayed but enormous. He has no fast button and is not meant to.
+    "standing.strike.up": "strike.clubbingForearm",
+    "standing.strike.right": "strike.heavyBoot",
     "standing.strike.left": "strike.elbow",
     "grapple.signature.up": "sig.ironclad.anvilHook",
     "grapple.signature.down": "sig.ironclad.vice",
     "grapple.signature.left": "sig.ironclad.girderLift",
     "grapple.signature.right": "sig.ironclad.foundryDrop",
-    "running.strike": "running.shoulderBlock",
+    // A big man's lariat rather than a shoulder — he arrives late and level.
+    "running.strike": "running.clothesline",
     "counter.neutral": "counter.powerslam",
     "finisher.1": "fin.ironclad.anvilDrop",
     "finisher.2": "fin.ironclad.forgeSeal",
   },
 
   /**
-   * The cruiserweight. Signature family is all speed and limb work, and the
-   * second finisher is a submission rather than a slam — the two characters
-   * therefore need two different setups to close out a match.
+   * The explosive heavyweight. Not a technician and not a flyer: he wins by
+   * arriving. Short burst strikes, a signature family that is nothing but
+   * vertical slams, and the loudest running attack in the game.
+   *
+   * The two characters therefore need genuinely different plans to close a
+   * match: Ironclad grinds someone groggy or down and holds them there, while
+   * Vanguard needs *space* — room to build speed for the tackle, or a groggy
+   * opponent to deadlift.
    */
   vanguard: {
     ...COMMON,
-    // A lead jab rather than a body kick, and an elbow drop rather than a
-    // stomp: the same slots, different picks out of the same pool.
-    "standing.strike.right": "strike.jab",
-    "ground.attack.feet": "ground.feet.elbowDrop",
-    "grapple.signature.up": "sig.vanguard.spinToss",
-    "grapple.signature.down": "sig.vanguard.armBar",
-    "grapple.signature.left": "sig.vanguard.pivotKick",
-    "grapple.signature.right": "sig.vanguard.gutwrench",
-    "counter.neutral": "counter.dropToeHold",
-    "finisher.1": "fin.vanguard.vanishingPoint",
-    "finisher.2": "fin.vanguard.lockjaw",
+    // The big one. This is his identity move, not a filler running attack.
+    "running.strike": "running.shoulderTackle",
+    "grapple.signature.up": "sig.vanguard.liftSlam",
+    "grapple.signature.down": "sig.vanguard.gutDump",
+    "grapple.signature.left": "sig.vanguard.driveSlam",
+    "grapple.signature.right": "sig.vanguard.deadliftSlam",
+    // He catches a charge by running through it, not by tripping it.
+    "counter.neutral": "counter.powerslam",
+    "finisher.1": "fin.vanguard.breakwall",
+    "finisher.2": "fin.vanguard.spireDrop",
   },
 };
 

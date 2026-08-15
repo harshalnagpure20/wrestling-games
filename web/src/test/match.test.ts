@@ -297,7 +297,7 @@ describe("state machine (§3)", () => {
       sp,
       1.5,
     );
-    expect(idsOf(events, "move:start")).toEqual(["running.shoulderBlock"]);
+    expect(idsOf(events, "move:start")).toEqual(["running.clothesline"]);
   });
 
   it("runs the three-hit combination string and then restarts it", () => {
@@ -390,8 +390,10 @@ describe("reversals (§7)", () => {
     const b = uppercut(versusIronclad, sp);
     const widthA = a.windowClosesAt - a.windowOpensAt;
     const widthB = b.windowClosesAt - b.windowOpensAt;
-    // Vanguard's Technique is 90 against Ironclad's 52.
-    expect(widthA).toBeGreaterThan(widthB);
+    // Vanguard is the explosive heavyweight, not the technician: his Technique
+    // is 42 against Ironclad's 55, so he gets the *narrower* window to react in.
+    // Being hard to reverse is the price he pays for hitting that hard.
+    expect(widthA).toBeLessThan(widthB);
   });
 
   it("lands on timing, and leaves the original attacker groggy", () => {
@@ -591,7 +593,9 @@ describe("stamina, meter and finishers (§10, §18)", () => {
     engine.forceIcons(0, 2);
     engine.forceState(1, "groggy", 8);
     const events = perform(engine, 0, { finisher: true, reverseStrike: true }, sp, 2.5);
-    expect(idsOf(events, "move:start")).toEqual(["fin.vanguard.vanishingPoint"]);
+    // Vanguard's other finisher is the running tackle, which Ironclad cannot
+    // steal from a standstill — so the groggy-only sit-out slam is what he gets.
+    expect(idsOf(events, "move:start")).toEqual(["fin.vanguard.spireDrop"]);
     expect(engine.fighters[0].icons).toBe(0);
   });
 
@@ -663,21 +667,21 @@ describe("submissions (§9)", () => {
   it("taps out an opponent who does not fight the hold", () => {
     const engine = new MatchEngine();
     const sp = spatialPair(0.8);
-    // Vanguard has the Submission attribute to finish one.
-    expect(engine.forceSubmission(1)).toBe(true);
+    // Ironclad is the grappler — he has the Submission attribute to finish one.
+    expect(engine.forceSubmission(0)).toBe(true);
     advance(engine, 8, sp);
     expect(engine.result?.condition).toBe("submission");
-    expect(engine.result?.winner).toBe(1);
+    expect(engine.result?.winner).toBe(0);
   });
 
   it("is a two-sided contest — mashing pushes the meter back", () => {
     const engine = new MatchEngine();
     const sp = spatialPair(0.8);
-    engine.forceSubmission(1);
+    engine.forceSubmission(0);
     advance(engine, 2, sp);
     const before = engine.submissionStatus!.pressure;
     for (let i = 0; i < 60; i += 1) {
-      engine.tick(DT, [press({ mash: i % 4 === 0 }), press()], sp);
+      engine.tick(DT, [press(), press({ mash: i % 4 === 0 })], sp);
     }
     expect(engine.submissionStatus!.pressure).toBeLessThan(before);
     expect(engine.result).toBeNull();
@@ -697,8 +701,8 @@ describe("submissions (§9)", () => {
   it("caps the hold at the attacker's Submission attribute", () => {
     const low = new MatchEngine();
     const high = new MatchEngine();
-    low.forceSubmission(0); // Ironclad — Submission 48.
-    high.forceSubmission(1); // Vanguard — Submission 78.
+    low.forceSubmission(1); // Vanguard — Submission 38.
+    high.forceSubmission(0); // Ironclad — Submission 62.
     expect(high.submissionStatus!.maxDuration).toBeGreaterThan(low.submissionStatus!.maxDuration);
 
     // And the hold really does let go rather than running forever.
@@ -793,13 +797,14 @@ describe("attributes actually modify behaviour (§12)", () => {
   it("Submission caps how long a hold can be maintained", () => {
     const engine = new MatchEngine({ rules: { tapOutsEnabled: false } });
     const sp = spatialPair(0.8);
-    engine.forceSubmission(0);
-    const ironcladCap = engine.submissionStatus!.maxDuration;
+    engine.forceSubmission(1);
+    const vanguardCap = engine.submissionStatus!.maxDuration;
     advance(engine, 12, sp);
 
     const other = new MatchEngine({ rules: { tapOutsEnabled: false } });
-    other.forceSubmission(1);
-    expect(other.submissionStatus!.maxDuration).toBeGreaterThan(ironcladCap);
+    other.forceSubmission(0);
+    // Ironclad holds a limb far longer than Vanguard can.
+    expect(other.submissionStatus!.maxDuration).toBeGreaterThan(vanguardCap);
   });
 });
 

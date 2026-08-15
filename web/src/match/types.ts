@@ -322,7 +322,22 @@ export type MatchEvent =
   | { type: "move:start"; fighter: 0 | 1; move: MoveDef }
   | { type: "move:impact"; fighter: 0 | 1; move: MoveDef; damage: number; region: Region }
   | { type: "move:whiff"; fighter: 0 | 1; move: MoveDef }
-  | { type: "move:failed"; fighter: 0 | 1; move: MoveDef; reason: "tooHeavy" | "tooTired" | "outOfRange" }
+  | {
+      type: "move:failed";
+      fighter: 0 | 1;
+      move: MoveDef;
+      reason: "tooHeavy" | "tooTired" | "outOfRange" | "noSituation" | "noIcons";
+    }
+  /**
+   * A button press that resolved to no move at all — an unauthored slot, or a
+   * state where that button simply means nothing.
+   *
+   * The engine's answer is still "nothing happens", which is the correct rule.
+   * This event exists so the *presentation* layer can nevertheless answer the
+   * player: a press must never be swallowed in silence, or the game reads as
+   * dropped inputs rather than as a refusal.
+   */
+  | { type: "action:empty"; fighter: 0 | 1; button: "strike" | "grapple" | "finisher" | "taunt" }
   | { type: "move:recoil"; fighter: 0 | 1; region: Region }
   | { type: "reversal"; fighter: 0 | 1; channel: ReversalChannel; depth: number; move: MoveDef }
   | { type: "reversal:missed"; fighter: 0 | 1; channel: ReversalChannel }

@@ -15,6 +15,7 @@
 
 import * as THREE from "three";
 
+import { audio } from "../audio/audioManager";
 import type { FighterIntent, TauntDir } from "./input";
 import { MatchEngine } from "../match/engine";
 import type { Fighter } from "../match/fighter";
@@ -69,6 +70,18 @@ export interface MatchHud {
   pin: { attacker: 0 | 1; count: number; guaranteed: boolean } | null;
   submission: { attacker: 0 | 1; pressure: number; region: Region } | null;
   result: MatchResult | null;
+}
+
+/** One-frame presentation pulse, drained by the ring engine after each tick. */
+export interface ImpactFeedback {
+  hitStop: number;
+  shake: number;
+  rumble: number;
+  rumbleSeconds: number;
+}
+
+function panFor(fighter: 0 | 1): number {
+  return fighter === 0 ? -0.35 : 0.35;
 }
 
 const WALK_SPEED = 2.4;
@@ -149,6 +162,32 @@ export class MatchControl {
     { distance: 99, band: "far", behind: false, groundSide: null, nearRopes: false },
   ];
   private lastEvents: MatchEvent[] = [];
+  private pendingFeedback: ImpactFeedback = {
+    hitStop: 0,
+    shake: 0,
+    rumble: 0,
+    rumbleSeconds: 0.6,
+  };
+
+  /** Ring engine reads this once per frame and zeros it. */
+  consumeFeedback(): ImpactFeedback {
+    const pulse = this.pendingFeedback;
+    this.pendingFeedback = { hitStop: 0, shake: 0, rumble: 0, rumbleSeconds: 0.6 };
+    return pulse;
+  }
+
+  private addFeedback(partial: Partial<ImpactFeedback>): void {
+    if (partial.hitStop)
+      this.pendingFeedback.hitStop = Math.max(this.pendingFeedback.hitStop, partial.hitStop);
+    if (partial.shake) this.pendingFeedback.shake += partial.shake;
+    if (partial.rumble) {
+      this.pendingFeedback.rumble = Math.max(this.pendingFeedback.rumble, partial.rumble);
+      this.pendingFeedback.rumbleSeconds = Math.max(
+        this.pendingFeedback.rumbleSeconds,
+        partial.rumbleSeconds ?? 0.6,
+      );
+    }
+  }
 
   // ------------------------------------------------------------ input glue
 
@@ -279,11 +318,43 @@ export class MatchControl {
           break;
         }
         case "move:impact": {
-          const victim = wrestlers[event.fighter ^ 1];
-          victim.setStrikeTilt(-0.1 - event.move.impactStrength * 0.14);
+          const victimIdx = (event.fighter ^ 1) as 0 | 1;
+          const victim = wrestlers[victimIdx];
+          const strength = event.move.impactStrength;
+          victim.sell(strength, this.facing[event.fighter]);
+          if (strength >= 0.4) victim.stopMarch(0.08);
           if (event.move.resultingOpponentState !== "down") {
-            this.shove(event.fighter ^ 1, wrestlers, 0.16 + event.move.impactStrength * 0.3);
+            this.shove(victimIdx, wrestlers, 0.16 + strength * 0.3);
           }
+          this.addFeedback({
+            hitStop: 0.018 + strength * 0.072,
+            shake: 0.08 + strength * 0.38,
+            rumble: strength >= 0.85 ? 0.3 + strength * 0.2 : 0,
+            rumbleSeconds: strength >= 0.85 ? 0.75 + strength * 0.45 : 0.6,
+          });
+          audio.matchImpact(strength, panFor(victimIdx));
+          if (event.move.category === "finisher") audio.crowdSwell(1, 2.8);
+          break;
+        }
+        case "move:whiff": {
+          wrestlers[event.fighter].lurch(0.35, this.facing[event.fighter]);
+          audio.matchWhiff(panFor(event.fighter));
+          this.addFeedback({ shake: 0.04 });
+          break;
+        }
+        case "move:failed":
+        case "action:empty": {
+          wrestlers[event.fighter].lurch(0.22, this.facing[event.fighter]);
+          audio.matchWhiff(panFor(event.fighter), event.type === "action:empty" ? 0.45 : 0.7);
+          break;
+        }
+        case "reversal": {
+          audio.crowdSwell(0.85, 2);
+          this.addFeedback({ hitStop: 0.055, shake: 0.26 });
+          break;
+        }
+        case "pin:count": {
+          if (event.count >= 2) audio.crowdSwell(0.4 + event.count * 0.18, 1.5);
           break;
         }
         case "state": {
@@ -294,10 +365,11 @@ export class MatchControl {
             this.velocity[event.fighter].set(0, 0, 0);
             view.playOneShot("knockdown");
             this.shove(event.fighter, wrestlers, 0.35);
+            this.addFeedback({ shake: 0.22, rumble: 0.32, rumbleSeconds: 0.85 });
           } else if (event.state === "gettingUp") {
             view.playOneShot("getUp");
           } else if (event.state === "standing" && event.previous !== "running") {
-            view.playIdle(0.2);
+            if (!view.isSelling) view.playIdle(0.2);
           }
           break;
         }
